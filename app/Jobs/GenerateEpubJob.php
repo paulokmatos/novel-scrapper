@@ -39,22 +39,30 @@ class GenerateEpubJob implements ShouldQueue
     public function handle(): void
     {
         $novel = Novel::fromUrl($this->novelUrl);
-        $offset = $this->offset;
-        $amount = $this->amount;
-
-        if($this->page > 1){
-            $offset = $this->offset * $this->page + 1;
-            $amount = $this->amount * $this->page;
-        }
 
         $service = new NovelFullService();
         $chapters = $service->parseChapters($novel, $this->page, $this->amount, $this->offset);
-        $title = strtoupper($novel->title) . "_FROM_{$offset}_TO_{$amount}";
+
+        $firstChapter = $this->extractChapterNumber($chapters[0]->title, "Prólogo");
+        $lastChapter = $this->extractChapterNumber($chapters[array_key_last($chapters)]->title, "Epílogo");
+        $chapterRange = $firstChapter . " a " . $lastChapter;
 
         $epub = new Epub();
-        $path = $epub->generate($title, $chapters);
+        $title = strtoupper($novel->title) . '__' . $chapterRange;
+        $path = $epub->generate($title, $chapters, $chapterRange, $novel->cover);
 
-        $this->sendEpub($path, $novel->title, $this->email);
+        $this->sendEpub($path, $title, $this->email);
+    }
+
+    private function extractChapterNumber(string $title, string $noNumber): string
+    {
+        $pattern = '/cap[íi]tulo\s*(\d+)/iu';
+
+        if (preg_match($pattern, $title, $matches)) {
+            return 'Capítulo ' . $matches[1];
+        }
+
+        return $noNumber;
     }
 
     private function sendEpub(string $path, string $title, string $email): void
@@ -63,7 +71,7 @@ class GenerateEpubJob implements ShouldQueue
             $message->to($email)
                 ->subject($title)
                 ->attach($path, [
-                    'as' => str_replace(' ', '-', $title).'.epub',
+                    'as' => str_replace(' ', '-', $title) . '.epub',
                     'mime' => 'application/epub+zip',
                 ]);
         });

@@ -20,7 +20,7 @@ class Epub
      * @return string
      * @throws \Exception
      */
-    public function generate(string $bookName, array $chapters, string $coverImageUrl = null): string
+    public function generate(string $bookName, array $chapters, string $chapterRange, string $coverImageUrl = null): string
     {
         $this->prepareDirectories();
 
@@ -36,7 +36,7 @@ class Epub
         $this->createChapters($chapters);
 
         if ($coverImagePath) {
-            $this->addCoverImage($coverImagePath);
+            $this->addCoverImage($coverImagePath, $bookName, $chapterRange);
         }
 
         $this->createTOC($bookName, $chapters);
@@ -62,25 +62,36 @@ class Epub
         return $tempImagePath;
     }
 
-    private function addCoverImage(string $coverImagePath): void
+    private function addCoverImage(string $coverImagePath, string $bookName, string $chapterRange): void
     {
+        // Copia a imagem da capa para o diretório temporário
         copy($coverImagePath, $this->tempDir . '/cover.jpg');
 
+        // Cria o arquivo XHTML para a capa
         $coverContent = '<?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE html>
         <html xmlns="http://www.w3.org/1999/xhtml">
             <head>
                 <title>Capa</title>
+                <style>
+                    body { text-align: center; font-family: Arial, sans-serif; margin: 0; padding: 0; }
+                    .content { margin: 20px; }
+                    .title { font-size: 24px; font-weight: bold; margin-top: 20px; }
+                    .chapter-range { font-size: 18px; margin-top: 10px; color: #555; }
+                </style>
             </head>
             <body>
-                <div style="text-align: center;">
-                    <img src="cover.jpg" alt="Capa" style="max-width: 100%; height: auto;"/>
+                <div class="content">
+                    <img src="cover.jpg" alt="Capa" style="max-width: 100%; height: auto;" />
+                    <div class="title">' . htmlspecialchars($bookName) . '</div>
+                    <div class="chapter-range">Capítulos: ' . htmlspecialchars($chapterRange) . '</div>
                 </div>
             </body>
         </html>';
 
         file_put_contents($this->tempDir . '/cover.xhtml', $coverContent);
     }
+
 
     private function prepareDirectories(): void
     {
@@ -121,7 +132,9 @@ class Epub
 
         foreach ($chapters as $index => $chapter) {
             $chapterFile = 'chapter' . ($index + 1) . '.xhtml';
-            $tocContent .= '<li><a href="' . htmlspecialchars($chapterFile) . '">' . htmlspecialchars($chapter->title) . '</a></li>';
+            $tocContent .= '<li><a href="' . htmlspecialchars($chapterFile) . '">' . htmlspecialchars(
+                    $chapter->title
+                ) . '</a></li>';
         }
 
         $tocContent .= '</ol>
@@ -199,10 +212,9 @@ class Epub
         }
     }
 
-
     private function generateEPUBFile(string $bookName, array $chapters): string
     {
-        $epubFile = storage_path('app/' . preg_replace('/[^a-zA-Z0-9]/', '_', strtolower($bookName)) . '.epub');
+        $epubFile = storage_path('app/' . $this->sanitizeFileName($bookName) . '.epub');
         $zip = new \ZipArchive();
 
         if ($zip->open($epubFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
@@ -233,6 +245,23 @@ class Epub
         return $epubFile;
     }
 
+    private function sanitizeFileName(string $fileName): string
+    {
+        // Substituir caracteres acentuados por equivalentes não acentuados
+        $fileName = iconv('UTF-8', 'ASCII//TRANSLIT', $fileName);
+
+        // Converter para minúsculas
+        $fileName = strtolower($fileName);
+
+        // Substituir qualquer caractere que não seja alfanumérico por '_'
+        $fileName = preg_replace('/[^a-z0-9]/', '_', $fileName);
+
+        // Remover underscores extras
+        $fileName = preg_replace('/_+/', '_', $fileName);
+
+        // Remover underscores no início ou fim do nome
+        return trim($fileName, '_');
+    }
 
     private function cleanTemporaryFiles(): void
     {

@@ -46,7 +46,7 @@ class GenerateEpubJob implements ShouldQueue
 
         $service = new NovelFullService();
         $chapters = $service->parseChapters($novel, $this->page, $this->amount, $this->offset);
-        $title = strtoupper($novel->title) . "_FROM_{$amount}_TO_{$offset}";
+        $title = strtoupper($novel->title) . "_FROM_{$offset}_TO_{$amount}";
 
         $epub = new Epub();
         $epub->generate($title, $chapters);

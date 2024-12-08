@@ -103,18 +103,21 @@ class Epub
     {
         foreach ($chapters as $index => $chapter) {
             $chapterContent = '<?xml version="1.0" encoding="UTF-8"?>
-                <!DOCTYPE html>
-                <html xmlns="http://www.w3.org/1999/xhtml">
-                    <head>
-                        <title>' . htmlspecialchars($chapter->title) . '</title>
-                    </head>
-                    <body>
-                        ' . nl2br(htmlspecialchars($chapter->content)) . '
-                    </body>
-                </html>';
+            <!DOCTYPE html>
+            <html xmlns="http://www.w3.org/1999/xhtml">
+                <head>
+                    <title>' . htmlspecialchars($chapter->title) . '</title>
+                </head>
+                <body>
+                    <h1>' . htmlspecialchars($chapter->title) . '</h1>
+                    <hr />
+                    <section>' . nl2br(htmlspecialchars($chapter->content)) . '</section>
+                </body>
+            </html>';
             file_put_contents($this->tempDir . '/chapter' . ($index + 1) . '.xhtml', $chapterContent);
         }
     }
+
 
     private function generateEPUBFile(string $bookName, array $chapters): string
     {

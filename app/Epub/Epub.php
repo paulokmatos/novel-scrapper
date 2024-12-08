@@ -20,14 +20,25 @@ class Epub
      * @return string
      * @throws \Exception
      */
-    public function generate(string $bookName, array $chapters): string
+    public function generate(string $bookName, array $chapters, string $coverImageUrl = null): string
     {
         $this->prepareDirectories();
 
         $this->createMimetype();
         $this->createContainerXML();
-        $this->createContentOPF($bookName, $chapters);
+
+        $coverImagePath = null;
+        if ($coverImageUrl) {
+            $coverImagePath = $this->downloadImage($coverImageUrl);
+        }
+
+        $this->createContentOPF($bookName, $chapters, $coverImagePath);
         $this->createChapters($chapters);
+
+        if ($coverImagePath) {
+            $this->addCoverImage($coverImagePath);
+        }
+
         $this->createTOC($bookName, $chapters);
 
         $epubFile = $this->generateEPUBFile($bookName, $chapters);
@@ -35,6 +46,40 @@ class Epub
         $this->cleanTemporaryFiles();
 
         return $epubFile;
+    }
+
+    private function downloadImage(string $imageUrl): string
+    {
+        $tempImagePath = $this->tempDir . '/cover.jpg';
+        $imageData = file_get_contents($imageUrl);
+
+        if ($imageData === false) {
+            throw new \RuntimeException("Não foi possível baixar a imagem da URL: " . $imageUrl);
+        }
+
+        file_put_contents($tempImagePath, $imageData);
+
+        return $tempImagePath;
+    }
+
+    private function addCoverImage(string $coverImagePath): void
+    {
+        copy($coverImagePath, $this->tempDir . '/cover.jpg');
+
+        $coverContent = '<?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE html>
+        <html xmlns="http://www.w3.org/1999/xhtml">
+            <head>
+                <title>Capa</title>
+            </head>
+            <body>
+                <div style="text-align: center;">
+                    <img src="cover.jpg" alt="Capa" style="max-width: 100%; height: auto;"/>
+                </div>
+            </body>
+        </html>';
+
+        file_put_contents($this->tempDir . '/cover.xhtml', $coverContent);
     }
 
     private function prepareDirectories(): void
@@ -87,11 +132,19 @@ class Epub
         file_put_contents($this->tempDir . '/toc.xhtml', $tocContent);
     }
 
-    private function createContentOPF(string $bookName, array $chapters): void
+    private function createContentOPF(string $bookName, array $chapters, ?string $coverImagePath = null): void
     {
-        $manifestItems = '<item id="toc" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>' . "\n";
+        $manifestItems = '';
+        $spineItems = '';
 
-        $spineItems = '<itemref idref="toc" linear="yes"/>' . "\n";
+        if ($coverImagePath) {
+            $manifestItems .= '<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>' . "\n";
+            $manifestItems .= '<item id="cover-image" href="cover.jpg" media-type="image/jpeg"/>' . "\n";
+            $spineItems .= '<itemref idref="cover" linear="yes"/>' . "\n";
+        }
+
+        $manifestItems .= '<item id="toc" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>' . "\n";
+        $spineItems .= '<itemref idref="toc" linear="yes"/>' . "\n";
 
         foreach ($chapters as $index => $chapter) {
             $chapterId = 'chapter' . ($index + 1);
@@ -104,8 +157,13 @@ class Epub
                         <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
                             <dc:title>' . htmlspecialchars($bookName) . '</dc:title>
                             <dc:language>pt</dc:language>
-                            <dc:identifier id="BookID">urn:uuid:' . Str::uuid()->toString() . '</dc:identifier>
-                        </metadata>
+                            <dc:identifier id="BookID">urn:uuid:' . Str::uuid()->toString() . '</dc:identifier>';
+
+        if ($coverImagePath) {
+            $contentOPF .= '<meta name="cover" content="cover-image"/>';
+        }
+
+        $contentOPF .= '</metadata>
                         <manifest>
                             ' . $manifestItems . '
                         </manifest>
@@ -116,6 +174,7 @@ class Epub
 
         file_put_contents($this->tempDir . '/content.opf', $contentOPF);
     }
+
 
     /**
      * @param Chapter[] $chapters
@@ -153,6 +212,14 @@ class Epub
             $zip->addFile($this->tempDir . '/content.opf', 'content.opf');
             $zip->addFile($this->tempDir . '/toc.xhtml', 'toc.xhtml');
 
+            if (file_exists($this->tempDir . '/cover.xhtml')) {
+                $zip->addFile($this->tempDir . '/cover.xhtml', 'cover.xhtml');
+            }
+
+            if (file_exists($this->tempDir . '/cover.jpg')) {
+                $zip->addFile($this->tempDir . '/cover.jpg', 'cover.jpg');
+            }
+
             foreach ($chapters as $index => $chapter) {
                 $chapterFile = 'chapter' . ($index + 1) . '.xhtml';
                 $zip->addFile($this->tempDir . '/' . $chapterFile, $chapterFile);
@@ -165,6 +232,7 @@ class Epub
 
         return $epubFile;
     }
+
 
     private function cleanTemporaryFiles(): void
     {

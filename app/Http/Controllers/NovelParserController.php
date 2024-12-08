@@ -61,11 +61,12 @@ class NovelParserController
             'from' => ['nullable', 'numeric', 'min:1']
         ]);
         $novelUrl = $request->input('novel_url');
+        $email = $request->input('email');
         $page = $request->input('page', 1);
         $amount = $request->input('amount', 5);
         $offset = $request->input('from', 1);
 
-        GenerateEpubJob::dispatch($novelUrl, $page, $amount, $offset);
+        GenerateEpubJob::dispatch($novelUrl, $email, $page, $amount, $offset);
 
         return response()->json(['message' => 'EPUB generation is in progress. You will receive an email shortly.']);
 

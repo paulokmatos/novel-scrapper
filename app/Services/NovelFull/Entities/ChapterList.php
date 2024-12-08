@@ -5,10 +5,10 @@ namespace App\Services\NovelFull\Entities;
 class ChapterList
 {
     public function __construct(
-        public Novel $novel,
+        public string $novel,
         public int $page,
-        public int $pageSize,
         public int $totalPages,
+        public array $chapters,
     )
     {
     }

@@ -28,6 +28,7 @@ class Epub
         $this->createContainerXML();
         $this->createContentOPF($bookName, $chapters);
         $this->createChapters($chapters);
+        $this->createTOC($bookName, $chapters);
 
         $epubFile = $this->generateEPUBFile($bookName, $chapters);
 
@@ -60,16 +61,37 @@ class Epub
         file_put_contents($this->tempDir . '/META-INF/container.xml', $containerXML);
     }
 
+    private function createTOC(string $bookName, array $chapters): void
+    {
+        $tocContent = '<?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE html>
+        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+            <head>
+                <title>Índice</title>
+            </head>
+            <body>
+                <h1>' . htmlspecialchars($bookName) . ' - Índice</h1>
+                <nav epub:type="toc">
+                    <ol>';
 
-    /**
-     * @param string $bookName
-     * @param Chapter[] $chapters
-     * @return void
-     */
+        foreach ($chapters as $index => $chapter) {
+            $chapterFile = 'chapter' . ($index + 1) . '.xhtml';
+            $tocContent .= '<li><a href="' . htmlspecialchars($chapterFile) . '">' . htmlspecialchars($chapter->title) . '</a></li>';
+        }
+
+        $tocContent .= '</ol>
+                </nav>
+            </body>
+        </html>';
+
+        file_put_contents($this->tempDir . '/toc.xhtml', $tocContent);
+    }
+
     private function createContentOPF(string $bookName, array $chapters): void
     {
-        $manifestItems = '';
-        $spineItems = '';
+        $manifestItems = '<item id="toc" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>' . "\n";
+
+        $spineItems = '<itemref idref="toc" linear="yes"/>' . "\n";
 
         foreach ($chapters as $index => $chapter) {
             $chapterId = 'chapter' . ($index + 1);
@@ -126,11 +148,10 @@ class Epub
 
         if ($zip->open($epubFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
             $zip->addFile($this->tempDir . '/mimetype', 'mimetype');
-
             $zip->addEmptyDir('META-INF');
             $zip->addFile($this->tempDir . '/META-INF/container.xml', 'META-INF/container.xml');
-
             $zip->addFile($this->tempDir . '/content.opf', 'content.opf');
+            $zip->addFile($this->tempDir . '/toc.xhtml', 'toc.xhtml');
 
             foreach ($chapters as $index => $chapter) {
                 $chapterFile = 'chapter' . ($index + 1) . '.xhtml';
